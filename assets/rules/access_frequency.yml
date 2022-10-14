@@ -1,0 +1,32 @@
+# Alert when the rate of events exceeds a threshold
+is_enabled: true
+
+# (Required)
+# Rule name, must be unique
+name: "apache acces response 500 frequency"
+
+# (Required)
+# Type of alert.
+# the frequency rule type alerts when num_events events occur with timeframe time
+type: frequency
+
+# (Required)
+# Index to search, wildcard supported
+index: workstation-apache-access-logs
+
+# (Required, frequency specific)
+# Alert when this many documents matching the query occur within a timeframe
+num_events: 1
+
+# (Required, frequency specific)
+# num_events must occur within this amount of time to trigger an alert
+timeframe:
+  hours: 2
+
+# (Required)
+# A list of Elasticsearch filters used for find events
+# These filters are joined with AND and nested in a filtered query
+# For more info: https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html
+filter:
+- term:
+    response: "500"

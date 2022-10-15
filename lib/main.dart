@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
-// import 'package:elastic_app/global.dart';
 import 'package:elastic_app/model/cluster_health.dart';
 import 'package:elastic_app/widgets/nodes.dart';
 import 'package:elastic_client/elastic_client.dart';
@@ -60,7 +59,6 @@ class _HomePageState extends State<HomePage> {
   //////////////////////////////////////////////////////////////////////////////
   String configsFileName = 'settings.yml';
   String configsFilePath = '/storage/emulated/0/Android/data/com.example.elastic_app/files/settings.yml';
-  bool configsInitializated = false;
   //////////////////////////////////////////////////////////////////////////////
   
   //////////////////////////////////////////////////////////////////////////////
@@ -72,7 +70,7 @@ class _HomePageState extends State<HomePage> {
   String uriNodes = "_cat/nodes/?format=json";
   String filterTerm = "response";
   int numEvents = 0;
-  int timeFrame = 2;  // Hours
+  int timeFrame = 0;  // Hours
   //////////////////////////////////////////////////////////////////////////////
 
   List<dynamic> fieldsList = [];
@@ -286,56 +284,56 @@ class _HomePageState extends State<HomePage> {
 
   Future<SettingsYaml> loadSettings(String configsFilePath) async {
     final settings = SettingsYaml.load(pathToSettings: configsFilePath);
-    if(settings.valueMap.isEmpty){
-      developer.log("empty settings");
+
+    if(settings['elasticsearchURL'] == null){
       settings['elasticsearchURL'] = elasticsearchURL;
+    }else{
+      elasticsearchURL = settings['elasticsearchURL'] as String;
+    }
+
+    if(settings['apiKey'] == null){
       settings['apiKey'] = apiKey;
+    }else{
+      apiKey = settings['apiKey'] as String;
+    }
+
+    if(settings['accessLogIndex'] == null){
       settings['accessLogIndex'] = accessLogIndex;
+    }else{
+      accessLogIndex = settings['accessLogIndex'] as String;
+    }
+
+    if(settings['uriIndices'] == null){
       settings['uriIndices'] = uriIndices;
+    }else{
+      uriIndices = settings['uriIndices'] as String;
+    }
+
+    if(settings['uriClusterHealth'] == null){
       settings['uriClusterHealth'] = uriClusterHealth;
+    }else{
+      uriClusterHealth = settings['uriClusterHealth'] as String;
+    }
+
+    if(settings['uriNodes'] == null){
       settings['uriNodes'] = uriNodes;
+    }else{
+      uriNodes = settings['uriNodes'] as String;
+    }
+
+    if(settings['numEvents'] == null){
       settings['numEvents'] = numEvents;
     }else{
-      if(!configsInitializated){
-        if(settings['elasticsearchURL'] == ''){
-          settings['elasticsearchURL'] = 'https://192.168.1.16:9200/';
-        }
-        if(settings['apiKey'] == ""){
-          settings['apiKey'] = 'SjBDV3hvTUIyMFBuSGhoblktT1U6WlVVUk5WQXhRcWlvV0JQNzF2UHJjUQ==';
-        }
-        if(settings['accessLogIndex'] == ""){
-          settings['accessLogIndex'] = 'workstation-apache-access-logs';
-        }
-        if(settings['uriIndices'] == ''){
-          settings['uriIndices'] = '_cat/indices';
-        }
-        if(settings['uriClusterHealth'] == ''){
-          settings['uriClusterHealth'] = '_cluster/health';
-        }
-        if(settings['uriNodes'] == ''){
-          settings['uriNodes'] = '_cat/nodes?format=json';
-        }
-        if(settings['enabled'] == false){
-          settings['enabled'] = true;
-        }
-        if(settings['numEvents'] == 0){
-          settings['numEvents'] = 1;
-        }
+      numEvents = settings['numEvents'] as int;
+    }
 
-        setState(() {
-          elasticsearchURL = settings['elasticsearchURL'] as String;
-          apiKey = settings['apiKey'] as String;
-          accessLogIndex = settings['accessLogIndex'] as String;
-          uriIndices = settings['uriIndices'] as String;
-          uriClusterHealth = settings['uriClusterHealth'] as String;
-          uriNodes = settings['uriNodes'] as String;
-          numEvents = settings['numEvents'] as int;
-        });
-      }
+    if(settings['timeFrame'] == null){
+      settings['timeFrame'] = timeFrame;
+    }else{
+      timeFrame = settings['timeFrame'] as int;
     }
     
     await settings.save();
-    configsInitializated = true;
     
     // await initClient();
     refreshClusterHealth();

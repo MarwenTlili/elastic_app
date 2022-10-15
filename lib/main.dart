@@ -351,16 +351,6 @@ class _HomePageState extends State<HomePage> {
   //////////////////////////////////////////////////////////////////////////////
   /// Cluster Health
   //////////////////////////////////////////////////////////////////////////////
-  // Future<void> initClient() async{
-  //   // init tansprot auth 
-  //   transport = HttpTransport(
-  //     url: elasticsearchURL, 
-  //     authorization: 'ApiKey $apiKey'
-  //   );
-  //   // init client object
-  //   client = Client(transport);
-  // }
-
   Future <ClusterHealth> clusterHealthData(String uri) async{
     http.Response httpResponse = await http.get( // fetch response from URI
       Uri.parse(uri),

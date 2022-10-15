@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 // import 'package:elastic_app/global.dart';
 import 'package:elastic_app/model/cluster_health.dart';
+import 'package:elastic_app/widgets/nodes.dart';
 import 'package:elastic_client/elastic_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,7 +48,8 @@ class _HomePageState extends State<HomePage> {
   late Client client;
 
   static bool isLoading = true;
-  List<Node> nodesDataList = [];
+  //////////////////////////////////////////////////////////////////////////////
+  List<Node> nodesList = [];
   dynamic clusterHealth = const ClusterHealth(
     clusterName: "", status: " ", timedOut: true, numberOfNodes: 0, 
     numberOfDataNodes: 0, activePrimaryShards: 0, activeShards: 0, 
@@ -55,20 +57,23 @@ class _HomePageState extends State<HomePage> {
     numberOfPendingTasks: 0, numberOfInFlightFetch: 0, 
     taskMaxWaitingInQueueMillis: 0, activeShardsPercentAsNumber: 0
   );
+  //////////////////////////////////////////////////////////////////////////////
   String configsFileName = 'settings.yml';
   String configsFilePath = '/storage/emulated/0/Android/data/com.example.elastic_app/files/settings.yml';
   bool configsInitializated = false;
-  // late SettingsYaml settings;
-
+  //////////////////////////////////////////////////////////////////////////////
+  
+  //////////////////////////////////////////////////////////////////////////////
   String elasticsearchURL = "https://192.168.1.16:9200/";
   String apiKey = "SjBDV3hvTUIyMFBuSGhoblktT1U6WlVVUk5WQXhRcWlvV0JQNzF2UHJjUQ==";
   String accessLogIndex = "workstation-apache-access-logs";
   String uriIndices = "_cat/indices";
   String uriClusterHealth = "_cluster/health";
-
+  String uriNodes = "_cat/nodes/?format=json";
   String filterTerm = "response";
   int numEvents = 0;
   int timeFrame = 2;  // Hours
+  //////////////////////////////////////////////////////////////////////////////
 
   List<dynamic> fieldsList = [];
 
@@ -76,7 +81,7 @@ class _HomePageState extends State<HomePage> {
   final accessLogIndexController = TextEditingController();
   final numEventsController = TextEditingController();
 
-  int _selectedIndex = 0;
+  int _selectedNav = 0;
 
   final List<Widget> _widgetOptions = [];
 
@@ -111,12 +116,12 @@ class _HomePageState extends State<HomePage> {
       
     });
 
-
+    fetchNodes(http.Client(), elasticsearchURL+uriNodes);
   }
 
   void _onItemTapped(int index) {
     setState(() {
-      _selectedIndex = index;
+      _selectedNav = index;
     });
   }
 
@@ -125,10 +130,10 @@ class _HomePageState extends State<HomePage> {
       'loading ...',
     ));
     _widgetOptions.add(const Text(
-      'Index 1: Business',
+      'loading ...',
     ));
     _widgetOptions.add(const Text(
-      'Index 2: School',
+      'loading ...',
     ));
   }
 
@@ -136,13 +141,18 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     initWidgetOptions();
     _widgetOptions[0] = ClusterHealthWidget(clusterHealth: clusterHealth, isLoading: isLoading);
+    _widgetOptions[1] = NodesWidget(nodesList: nodesList, isLoading: isLoading);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
       ),
-      body: Center(
-        child: _widgetOptions.elementAt(_selectedIndex),
-          // 
+      body: SingleChildScrollView(
+        physics: const ScrollPhysics(),
+        child: Column(
+          children: [
+            _widgetOptions.elementAt(_selectedNav),
+          ],
+        )
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
@@ -151,21 +161,22 @@ class _HomePageState extends State<HomePage> {
             label: 'Cluster',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.document_scanner),
-            label: 'Indices',
+            icon: Icon(Icons.account_tree_rounded),
+            label: 'Nodes',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.doorbell),
             label: 'Notifications',
           ),
         ],
-        currentIndex: _selectedIndex,
+        currentIndex: _selectedNav,
         selectedItemColor: Colors.amber[800],
         onTap: _onItemTapped,
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           refreshClusterHealth();
+          fetchNodes(http.Client(), elasticsearchURL+uriNodes);
         },
         tooltip: 'Refresh',
         child: const Icon(Icons.refresh),
@@ -282,6 +293,7 @@ class _HomePageState extends State<HomePage> {
       settings['accessLogIndex'] = accessLogIndex;
       settings['uriIndices'] = uriIndices;
       settings['uriClusterHealth'] = uriClusterHealth;
+      settings['uriNodes'] = uriNodes;
       settings['numEvents'] = numEvents;
     }else{
       if(!configsInitializated){
@@ -300,6 +312,9 @@ class _HomePageState extends State<HomePage> {
         if(settings['uriClusterHealth'] == ''){
           settings['uriClusterHealth'] = '_cluster/health';
         }
+        if(settings['uriNodes'] == ''){
+          settings['uriNodes'] = '_cat/nodes?format=json';
+        }
         if(settings['enabled'] == false){
           settings['enabled'] = true;
         }
@@ -313,6 +328,7 @@ class _HomePageState extends State<HomePage> {
           accessLogIndex = settings['accessLogIndex'] as String;
           uriIndices = settings['uriIndices'] as String;
           uriClusterHealth = settings['uriClusterHealth'] as String;
+          uriNodes = settings['uriNodes'] as String;
           numEvents = settings['numEvents'] as int;
         });
       }
@@ -321,7 +337,7 @@ class _HomePageState extends State<HomePage> {
     await settings.save();
     configsInitializated = true;
     
-    await initClient();
+    // await initClient();
     refreshClusterHealth();
 
     return settings;
@@ -335,22 +351,20 @@ class _HomePageState extends State<HomePage> {
   //////////////////////////////////////////////////////////////////////////////
   /// Cluster Health
   //////////////////////////////////////////////////////////////////////////////
-  Future<void> initClient() async{
-    // init tansprot auth 
-    transport = HttpTransport(
-      url: elasticsearchURL, 
-      authorization: 'ApiKey $apiKey'
-    );
-    // init client object
-    client = Client(transport);
-  }
+  // Future<void> initClient() async{
+  //   // init tansprot auth 
+  //   transport = HttpTransport(
+  //     url: elasticsearchURL, 
+  //     authorization: 'ApiKey $apiKey'
+  //   );
+  //   // init client object
+  //   client = Client(transport);
+  // }
 
   Future <ClusterHealth> clusterHealthData(String uri) async{
     http.Response httpResponse = await http.get( // fetch response from URI
       Uri.parse(uri),
-      headers: {
-        HttpHeaders.authorizationHeader: 'ApiKey $apiKey'
-      },
+      headers: {HttpHeaders.authorizationHeader: 'ApiKey $apiKey'},
     );
     if(httpResponse.statusCode == 200){ // if status 200 get list for nodes
       return ClusterHealth.fromJson(jsonDecode(httpResponse.body));  
@@ -374,6 +388,22 @@ class _HomePageState extends State<HomePage> {
     });
   }
   //////////////////////////////////////////////////////////////////////////////
+  // A function that converts a response body into a List<Node>.
+  List<Node> parseNodes(String responseBody) {
+    final parsed = jsonDecode(responseBody).cast<Map<String, dynamic>>();
+    List<Node> list = parsed.map<Node>((json) => Node.fromJson(json)).toList();
+    nodesList = list;
+    return list;
+  }
+  Future<List<Node>> fetchNodes(http.Client client, String uri) async{
+    isLoading = true;
+    final response = await client.get(Uri.parse(uri),headers: {HttpHeaders.authorizationHeader: 'ApiKey $apiKey'});
+    // Use the compute function to run parsePhotos in a separate isolate.
+    isLoading = false;
+    return parseNodes(response.body);
+  }
+  //////////////////////////////////////////////////////////////////////////////
+
 }
 
 class CustomHttpOverrides extends HttpOverrides{

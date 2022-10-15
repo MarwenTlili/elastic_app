@@ -1,14 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:elastic_app/model/cluster_health.dart';
 import 'package:elastic_app/widgets/nodes.dart';
+import 'package:elastic_app/widgets/notifications.dart';
 import 'package:elastic_client/elastic_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:settings_yaml/settings_yaml.dart';
+import 'global.dart';
 import 'model/node.dart';
 import 'package:path/path.dart';
 import 'package:http/http.dart' as http;
@@ -74,6 +77,9 @@ class _HomePageState extends State<HomePage> {
   int numEvents = 1;
   int timeFrame = 2;  // Hours
   //////////////////////////////////////////////////////////////////////////////
+  String dropdownValue = formResponsesList.first;
+  //////////////////////////////////////////////////////////////////////////////
+  List<AccessLog> notificationsList = [];
 
   List<dynamic> fieldsList = [];
 
@@ -89,6 +95,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState(){
     super.initState();
+    notificationsList = [];
     requestPermission(Permission.storage).then((permissionStatus){
       developer.log("Permission.storage isGranted: ${permissionStatus.isGranted}");
 
@@ -113,11 +120,21 @@ class _HomePageState extends State<HomePage> {
           
         });
       });
-
       
     });
 
     fetchNodes(http.Client(), elasticsearchURL+uriNodes);
+    timer = Timer.periodic(
+      const Duration(seconds: 3), (Timer t) => fetchAccessLogsResponse(
+        http.Client(), elasticsearchURL+accessLogIndex+"/_search", ""
+      )
+    );
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
   }
 
   void _onItemTapped(int index) {
@@ -143,6 +160,8 @@ class _HomePageState extends State<HomePage> {
     initWidgetOptions();
     _widgetOptions[0] = ClusterHealthWidget(clusterHealth: clusterHealth, isLoading: isLoading);
     _widgetOptions[1] = NodesWidget(nodesList: nodesList, isLoading: isLoading);
+    _widgetOptions[2] = NotificationsWidget(notificationsList: notificationsList, isLoading: isLoading);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
@@ -156,17 +175,20 @@ class _HomePageState extends State<HomePage> {
         )
       ),
       bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
+        items: <BottomNavigationBarItem>[
+          const BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: 'Cluster',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.account_tree_rounded),
             label: 'Nodes',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.doorbell),
+            icon: Icon(
+              Icons.doorbell,
+              color: notificationsList.isNotEmpty ? Colors.red: Colors.grey,
+            ),
             label: 'Notifications',
           ),
         ],
@@ -178,6 +200,7 @@ class _HomePageState extends State<HomePage> {
         onPressed: () {
           refreshClusterHealth();
           fetchNodes(http.Client(), elasticsearchURL+uriNodes);
+          fetchAccessLogsResponse(http.Client(), elasticsearchURL+accessLogIndex+"/_search", "");
         },
         tooltip: 'Refresh',
         child: const Icon(Icons.refresh),
@@ -215,6 +238,30 @@ class _HomePageState extends State<HomePage> {
                       return null;
                     },
                   ),
+                  const Text('Response Code'),
+                  DropdownButton<String>(
+                    value: dropdownValue,
+                    icon: const Icon(Icons.arrow_downward),
+                    elevation: 16,
+                    style: const TextStyle(color: Colors.deepPurple),
+                    underline: Container(
+                      height: 2,
+                      color: Colors.deepPurpleAccent,
+                    ),
+                    onChanged: (String? value) {
+                      developer.inspect(value);
+                      setState(() {
+                        dropdownValue = value!;
+                      });
+                    },
+                    items: formResponsesList.map<DropdownMenuItem<String>>((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value),
+                        );
+                    }).toList()
+                  ),
+
                   TextFormField(
                     // controller: numEventsController,
                     keyboardType: TextInputType.number,
@@ -258,10 +305,7 @@ class _HomePageState extends State<HomePage> {
                     padding: const EdgeInsets.symmetric(vertical: 16.0),
                     child: ElevatedButton(
                       onPressed: () {
-                        // Validate returns true if the form is valid, or false otherwise.
                         if (_formKey.currentState!.validate()) {
-                          // If the form is valid, display a snackbar. In the real world,
-                          // you'd often call a server or save the information in a database.
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Saving settings ...')),
                           );
@@ -416,7 +460,61 @@ class _HomePageState extends State<HomePage> {
     return parseNodes(response.body);
   }
   //////////////////////////////////////////////////////////////////////////////
-  
+  List<AccessLog> parseAccessLogsResponse(String responseBody){
+    final parsed = jsonDecode(responseBody).cast<String, dynamic>();
+    // developer.log('hits: ${parsed["hits"]["total"]["value"]}');
+    if(parsed['error'] != null){
+      return [];
+    }
+    List<AccessLog> list = parsed['hits']['hits'].map<AccessLog>((json) => AccessLog.fromJson(json)).toList();
+    // checkForAccessLogsEvent(list);
+    setState(() {
+      notificationsList = list;
+    });
+    return list;
+  }
+  Future<List<AccessLog>> fetchAccessLogsResponse(http.Client client, String uri, String response) async{
+    isLoading = true;
+    String nowSubHours = DateTime.now().subtract(Duration(hours: timeFrame)).toIso8601String();
+    String body = '{ "query": {"query_string": { "query": "@timestamp:[$nowSubHours TO now] AND (response:$dropdownValue)" }}}';
+    final response = await client.post(
+      Uri.parse(uri),
+      headers: {
+        HttpHeaders.authorizationHeader: 'ApiKey $apiKey',
+        HttpHeaders.contentTypeHeader: 'application/json'
+      },
+      body: body
+    );
+    isLoading = false;
+    developer.log(body);
+    developer.log(response.body);
+    var data = parseAccessLogsResponse(response.body);
+    // List<dynamic> hits = data['hits']['hits'].cast<Map<String, dynamic>>();
+    // developer.inspect(data);
+    print("numEvents: $numEvents, timeFrame: $timeFrame");
+    return data;
+  }
+
+  Future<void> checkForAccessLogsEvent(List<AccessLog> data) async{
+    if(data.length >= numEvents){ // notify
+      print("checkForAccessLogsEvent called");
+
+      // data.every((element) => notificationsList.contains(element));
+
+      // for (AccessLog element in data) {
+      //   if (notificationsList.isNotEmpty && (notificationsList.contains(element) == false)) {
+      //     print("add element to notificationsList");
+      //     setState(() {
+      //       notificationsList.add(element);
+      //     });
+      //   }
+      // }
+
+      // developer.inspect(notificationsList);
+
+    }
+  }
+
 }
 
 class CustomHttpOverrides extends HttpOverrides{

@@ -13,6 +13,7 @@ import 'model/node.dart';
 import 'package:path/path.dart';
 import 'package:http/http.dart' as http;
 import 'widgets/cluster_health.dart';
+import 'model/access_log.dart';
 
 Future<void> main() async{
   HttpOverrides.global = CustomHttpOverrides();
@@ -62,15 +63,16 @@ class _HomePageState extends State<HomePage> {
   //////////////////////////////////////////////////////////////////////////////
   
   //////////////////////////////////////////////////////////////////////////////
+  late SettingsYaml settingsYaml;
   String elasticsearchURL = "https://192.168.1.16:9200/";
   String apiKey = "SjBDV3hvTUIyMFBuSGhoblktT1U6WlVVUk5WQXhRcWlvV0JQNzF2UHJjUQ==";
-  String accessLogIndex = "workstation-apache-access-logs";
+  String accessLogIndex = "access-log-2022";
   String uriIndices = "_cat/indices";
   String uriClusterHealth = "_cluster/health";
   String uriNodes = "_cat/nodes/?format=json";
   String filterTerm = "response";
-  int numEvents = 0;
-  int timeFrame = 0;  // Hours
+  int numEvents = 1;
+  int timeFrame = 2;  // Hours
   //////////////////////////////////////////////////////////////////////////////
 
   List<dynamic> fieldsList = [];
@@ -78,6 +80,7 @@ class _HomePageState extends State<HomePage> {
   final _formKey = GlobalKey<FormState>();
   final accessLogIndexController = TextEditingController();
   final numEventsController = TextEditingController();
+  final timeFrameController = TextEditingController();
 
   int _selectedNav = 0;
 
@@ -233,6 +236,24 @@ class _HomePageState extends State<HomePage> {
                       return null;
                     },
                   ),
+                  TextFormField(
+                    keyboardType: TextInputType.number,
+                    initialValue: timeFrame.toString(),
+                    decoration: const InputDecoration(
+                      border: UnderlineInputBorder(),
+                      labelText: 'Time Frame (in Hours)'
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly
+                    ],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter some integer';
+                      }
+                      timeFrameController.text = value;
+                      return null;
+                    },
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16.0),
                     child: ElevatedButton(
@@ -242,14 +263,20 @@ class _HomePageState extends State<HomePage> {
                           // If the form is valid, display a snackbar. In the real world,
                           // you'd often call a server or save the information in a database.
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Processing Data')),
+                            const SnackBar(content: Text('Saving settings ...')),
                           );
+
                           // update settings
-                          saveSetting("accessLogIndex", accessLogIndexController.text);
-                          saveSetting("numEvents", int.parse(numEventsController.text));
+                          settingsYaml['accessLogIndex'] = accessLogIndexController.text;
+                          settingsYaml['numEvents'] = int.parse(numEventsController.text);
+                          settingsYaml['timeFrame'] = int.parse(timeFrameController.text);
+                          settingsYaml.save();
+
+                          // keep ui state
                           setState(() {
                             accessLogIndex = accessLogIndexController.text;
                             numEvents = int.parse(numEventsController.text);
+                            timeFrame = int.parse(timeFrameController.text);
                           });
                         }
                       },
@@ -283,68 +310,67 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<SettingsYaml> loadSettings(String configsFilePath) async {
-    final settings = SettingsYaml.load(pathToSettings: configsFilePath);
+    settingsYaml = SettingsYaml.load(pathToSettings: configsFilePath);
 
-    if(settings['elasticsearchURL'] == null){
-      settings['elasticsearchURL'] = elasticsearchURL;
+    if(settingsYaml['elasticsearchURL'] == null){
+      settingsYaml['elasticsearchURL'] = elasticsearchURL;
     }else{
-      elasticsearchURL = settings['elasticsearchURL'] as String;
+      elasticsearchURL = settingsYaml['elasticsearchURL'] as String;
     }
 
-    if(settings['apiKey'] == null){
-      settings['apiKey'] = apiKey;
+    if(settingsYaml['apiKey'] == null){
+      settingsYaml['apiKey'] = apiKey;
     }else{
-      apiKey = settings['apiKey'] as String;
+      apiKey = settingsYaml['apiKey'] as String;
     }
 
-    if(settings['accessLogIndex'] == null){
-      settings['accessLogIndex'] = accessLogIndex;
+    if(settingsYaml['accessLogIndex'] == null){
+      settingsYaml['accessLogIndex'] = accessLogIndex;
     }else{
-      accessLogIndex = settings['accessLogIndex'] as String;
+      accessLogIndex = settingsYaml['accessLogIndex'] as String;
     }
 
-    if(settings['uriIndices'] == null){
-      settings['uriIndices'] = uriIndices;
+    if(settingsYaml['uriIndices'] == null){
+      settingsYaml['uriIndices'] = uriIndices;
     }else{
-      uriIndices = settings['uriIndices'] as String;
+      uriIndices = settingsYaml['uriIndices'] as String;
     }
 
-    if(settings['uriClusterHealth'] == null){
-      settings['uriClusterHealth'] = uriClusterHealth;
+    if(settingsYaml['uriClusterHealth'] == null){
+      settingsYaml['uriClusterHealth'] = uriClusterHealth;
     }else{
-      uriClusterHealth = settings['uriClusterHealth'] as String;
+      uriClusterHealth = settingsYaml['uriClusterHealth'] as String;
     }
 
-    if(settings['uriNodes'] == null){
-      settings['uriNodes'] = uriNodes;
+    if(settingsYaml['uriNodes'] == null){
+      settingsYaml['uriNodes'] = uriNodes;
     }else{
-      uriNodes = settings['uriNodes'] as String;
+      uriNodes = settingsYaml['uriNodes'] as String;
     }
 
-    if(settings['numEvents'] == null){
-      settings['numEvents'] = numEvents;
+    if(settingsYaml['numEvents'] == null){
+      settingsYaml['numEvents'] = numEvents;
     }else{
-      numEvents = settings['numEvents'] as int;
+      numEvents = settingsYaml['numEvents'] as int;
     }
 
-    if(settings['timeFrame'] == null){
-      settings['timeFrame'] = timeFrame;
+    if(settingsYaml['timeFrame'] == null){
+      settingsYaml['timeFrame'] = timeFrame;
     }else{
-      timeFrame = settings['timeFrame'] as int;
+      timeFrame = settingsYaml['timeFrame'] as int;
     }
     
-    await settings.save();
+    settingsYaml.save();
     
-    // await initClient();
     refreshClusterHealth();
 
-    return settings;
+    return settingsYaml;
   }
 
   Future<void> saveSetting(String key, dynamic value) async{
-    final settings = SettingsYaml.load(pathToSettings: configsFilePath);
-    settings[key] = value;
-    await settings.save();
+    settingsYaml = SettingsYaml.load(pathToSettings: configsFilePath);
+    settingsYaml[key] = value;
+    settingsYaml.save();
   }
   //////////////////////////////////////////////////////////////////////////////
   /// Cluster Health
@@ -369,7 +395,7 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         clusterHealth = value;
         isLoading = false;
-        developer.inspect(clusterHealth);
+        // developer.inspect(clusterHealth);
       });
     }).onError((error, stackTrace) {
       throw Exception('Exception: failed to refresh ClusterHealth !');
@@ -386,12 +412,11 @@ class _HomePageState extends State<HomePage> {
   Future<List<Node>> fetchNodes(http.Client client, String uri) async{
     isLoading = true;
     final response = await client.get(Uri.parse(uri),headers: {HttpHeaders.authorizationHeader: 'ApiKey $apiKey'});
-    // Use the compute function to run parsePhotos in a separate isolate.
     isLoading = false;
     return parseNodes(response.body);
   }
   //////////////////////////////////////////////////////////////////////////////
-
+  
 }
 
 class CustomHttpOverrides extends HttpOverrides{

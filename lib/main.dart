@@ -95,7 +95,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState(){
     super.initState();
-    notificationsList = [];
     requestPermission(Permission.storage).then((permissionStatus){
       developer.log("Permission.storage isGranted: ${permissionStatus.isGranted}");
 
@@ -464,18 +463,17 @@ class _HomePageState extends State<HomePage> {
     final parsed = jsonDecode(responseBody).cast<String, dynamic>();
     // developer.log('hits: ${parsed["hits"]["total"]["value"]}');
     if(parsed['error'] != null){
+      developer.log(parsed.toString());
       return [];
     }
     List<AccessLog> list = parsed['hits']['hits'].map<AccessLog>((json) => AccessLog.fromJson(json)).toList();
     // checkForAccessLogsEvent(list);
-    setState(() {
-      notificationsList = list;
-    });
     return list;
   }
   Future<List<AccessLog>> fetchAccessLogsResponse(http.Client client, String uri, String response) async{
     isLoading = true;
     String nowSubHours = DateTime.now().subtract(Duration(hours: timeFrame)).toIso8601String();
+    // print(nowSubHours);
     String body = '{ "query": {"query_string": { "query": "@timestamp:[$nowSubHours TO now] AND (response:$dropdownValue)" }}}';
     final response = await client.post(
       Uri.parse(uri),
@@ -486,8 +484,8 @@ class _HomePageState extends State<HomePage> {
       body: body
     );
     isLoading = false;
-    developer.log(body);
-    developer.log(response.body);
+    // developer.log(body);
+    // developer.log(response.body);
     var data = parseAccessLogsResponse(response.body);
     // List<dynamic> hits = data['hits']['hits'].cast<Map<String, dynamic>>();
     // developer.inspect(data);
@@ -497,6 +495,9 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> checkForAccessLogsEvent(List<AccessLog> data) async{
     if(data.length >= numEvents){ // notify
+      setState(() {
+        notificationsList = data;
+      });
       print("checkForAccessLogsEvent called");
 
       // data.every((element) => notificationsList.contains(element));

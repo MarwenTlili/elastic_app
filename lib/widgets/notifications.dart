@@ -19,7 +19,7 @@ class NotificationsWidgetState extends State<NotificationsWidget>{
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      physics: ScrollPhysics(),
+      physics: const ScrollPhysics(),
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
